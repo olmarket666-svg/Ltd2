@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LTD // Registre de service</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<style>
+  :root{
+    --ink:#17160f;
+    --ink-2:#242217;
+    --paper:#f6f1e3;
+    --paper-2:#efe7d2;
+    --yellow:#ffc72c;
+    --red:#e1362c;
+    --green:#2f9e5b;
+    --muted:#8b8672;
+    --muted-2:#5c594a;
+    --line: rgba(23,22,15,0.14);
+    --radius: 2px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--ink);
+    color:var(--paper);
+    font-family:'Inter',sans-serif;
+    min-height:100vh;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+    background-size: 28px 28px;
+  }
+  ::selection{ background:var(--yellow); color:var(--ink);}
+  h1,h2,h3{ font-family:'Archivo Black', sans-serif; font-weight:400; margin:0; letter-spacing:0.5px;}
+  .mono{ font-family:'Space Mono', monospace; }
+  a{ color:var(--yellow); }
+  button{ font-family:'Inter',sans-serif; cursor:pointer; border:none; }
+  input, textarea{ font-family:'Space Mono', monospace; }
+
+  /* ---------- topo bar ---------- */
+  .storefront{
+    background: repeating-linear-gradient(135deg, var(--yellow), var(--yellow) 18px, var(--ink) 18px, var(--ink) 36px);
+    height:8px;
+    width:100%;
+  }
+  .header{
+    max-width:920px;
+    margin:0 auto;
+    padding:28px 24px 18px;
+    display:flex;
+    align-items:flex-end;
+    justify-content:space-between;
+    flex-wrap:wrap;
+    gap:14px;
+    border-bottom:2px solid var(--paper);
+  }
+  .brand{ display:flex; align-items:center; gap:14px; }
+  .brand-badge{
+    background:var(--yellow);
+    color:var(--ink);
+    font-family:'Archivo Black',sans-serif;
+    font-size:22px;
+    padding:8px 12px;
+    line-height:1;
+    transform:rotate(-3deg);
+    box-shadow:4px 4px 0 var(--red);
+  }
+  .brand h1{ font-size:28px; }
+  .brand p{ margin:2px 0 0; color:var(--muted); font-size:12.5px; font-family:'Space Mono',monospace; text-transform:uppercase; letter-spacing:1.5px;}
+  .status-pill{
+    display:flex; align-items:center; gap:10px;
+    font-family:'Space Mono',monospace;
+    font-size:13px;
+    padding:8px 14px;
+    border:1px solid var(--paper);
+  }
+  .dot{ width:9px; height:9px; border-radius:50%; background:var(--muted); }
+  .dot.on{ background:var(--green); box-shadow:0 0 0 3px rgba(47,158,91,0.25); }
+
+  /* ---------- tabs ---------- */
+  .tabbar{
+    max-width:920px; margin:0 auto; padding:18px 24px 0;
+    display:flex; gap:8px; flex-wrap:wrap;
+  }
+  .tab{
+    background:transparent; color:var(--muted);
+    border:1px solid var(--line);
+    padding:10px 18px;
+    font-family:'Space Mono',monospace;
+    font-size:12.5px;
+    letter-spacing:1.2px;
+    text-transform:uppercase;
+  }
+  .tab.active{ background:var(--paper); color:var(--ink); border-color:var(--paper); font-weight:700;}
+
+  .panel{ max-width:920px; margin:0 auto; padding:26px 24px 80px; }
+  .panel[hidden]{ display:none; }
+
+  .card{
+    background:var(--paper);
+    color:var(--ink);
+    padding:22px;
+    margin-bottom:18px;
+  }
+  .card h2{ font-size:16px; margin-bottom:14px; display:flex; align-items:center; gap:8px;}
+  .card h2 .eyebrow{ font-family:'Space Mono',monospace; font-size:11px; background:var(--ink); color:var(--yellow); padding:2px 6px;}
+
+  /* ---------- config screen ---------- */
+  #config-screen{
+    max-width:520px; margin:60px auto; padding:0 20px;
+  }
+  #config-screen .card p{ font-size:13px; color:var(--muted-2); line-height:1.6; }
+  .field{ margin-bottom:14px; }
+  .field label{ display:block; font-size:11.5px; font-family:'Space Mono',monospace; text-transform:uppercase; letter-spacing:1px; color:var(--muted-2); margin-bottom:5px;}
+  .field input{
+    width:100%; padding:10px 12px; border:1px solid var(--ink); background:#fff; color:var(--ink); font-size:13.5px;
+  }
+  .btn{
+    background:var(--ink); color:var(--paper);
+    padding:12px 20px; font-size:13px; font-weight:700;
+    letter-spacing:0.5px; text-transform:uppercase; font-family:'Space Mono',monospace;
+  }
+  .btn:hover{ background:var(--ink-2); }
+  .btn.yellow{ background:var(--yellow); color:var(--ink); }
+  .btn.red{ background:var(--red); color:var(--paper); }
+  .btn.ghost{ background:transparent; color:var(--ink); border:1px solid var(--ink); }
+  .btn:disabled{ opacity:0.5; cursor:not-allowed; }
+  .btn.block{ width:100%; }
+  .err{ color:var(--red); font-size:12.5px; margin-top:10px; font-family:'Space Mono',monospace; }
+
+  /* ---------- punch clock ---------- */
+  .punch{
+    display:flex; align-items:center; justify-content:space-between; gap:20px; flex-wrap:wrap;
+  }
+  .punch-timer{ font-family:'Space Mono',monospace; font-size:34px; font-weight:700; letter-spacing:1px;}
+  .punch-timer.idle{ color:var(--muted); font-size:22px; }
+  .punch-btn{
+    padding:16px 26px; font-size:14px; font-weight:700; font-family:'Space Mono',monospace; text-transform:uppercase; letter-spacing:1px;
+  }
+
+  table{ width:100%; border-collapse:collapse; font-family:'Space Mono',monospace; font-size:13px;}
+  th{ text-align:left; font-size:10.5px; text-transform:uppercase; letter-spacing:1px; color:var(--muted-2); padding:6px 4px; border-bottom:2px solid var(--ink);}
+  td{ padding:8px 4px; border-bottom:1px solid var(--line); }
+  tr:last-child td{ border-bottom:none;}
+
+  .barrow{ display:flex; align-items:center; gap:10px; margin-bottom:8px; }
+  .barrow .lbl{ width:120px; font-family:'Space Mono',monospace; font-size:11.5px; flex-shrink:0;}
+  .barrow .track{ flex:1; background:var(--paper-2); height:16px; position:relative; overflow:hidden;}
+  .barrow .fill{ background:var(--ink); height:100%; }
+  .barrow.current .fill{ background:var(--red); }
+  .barrow .val{ width:56px; text-align:right; font-family:'Space Mono',monospace; font-size:11.5px; flex-shrink:0;}
+
+  /* ---------- receipt (facture) ---------- */
+  .receipt{
+    background:var(--paper);
+    color:var(--ink);
+    padding:0;
+    position:relative;
+    margin-bottom:18px;
+  }
+  .receipt-barcode{
+    height:26px;
+    background: repeating-linear-gradient(90deg, var(--ink) 0px, var(--ink) 2px, transparent 2px, transparent 5px, var(--ink) 5px, var(--ink) 6px, transparent 6px, transparent 10px);
+    margin:0 22px;
+  }
+  .receipt-inner{ padding:20px 22px 8px; }
+  .receipt-title{ text-align:center; font-family:'Archivo Black',sans-serif; font-size:20px; letter-spacing:2px; margin-bottom:2px;}
+  .receipt-sub{ text-align:center; font-family:'Space Mono',monospace; font-size:11px; color:var(--muted-2); margin-bottom:16px; letter-spacing:1px;}
+  .receipt-line{
+    display:flex; align-items:baseline; gap:6px;
+    font-family:'Space Mono',monospace; font-size:13px;
+    padding:7px 0;
+    border-bottom:1px dashed var(--line);
+  }
+  .receipt-line .name{ flex-shrink:1; }
+  .receipt-line .qty{ color:var(--muted-2); font-size:11.5px; }
+  .receipt-line .dots{ flex:1; border-bottom:1px dotted var(--muted); margin-bottom:4px; }
+  .receipt-line .amt{ font-weight:700; flex-shrink:0; }
+  .receipt-line .del{ background:none; color:var(--red); font-size:11px; margin-left:6px; font-family:'Space Mono',monospace; flex-shrink:0;}
+  .receipt-total{
+    display:flex; justify-content:space-between; padding:14px 0 4px;
+    font-family:'Space Mono',monospace; font-weight:700; font-size:16px;
+    border-top:2px solid var(--ink); margin-top:6px;
+  }
+  .receipt-jag{
+    height:12px;
+    background: linear-gradient(135deg, transparent 50%, var(--ink) 50%) 0 0/10px 10px repeat-x,
+                linear-gradient(-135deg, transparent 50%, var(--ink) 50%) 0 0/10px 10px repeat-x;
+    background-color:var(--paper);
+  }
+
+  .facture-form{ display:grid; grid-template-columns:2fr 1fr 1fr auto; gap:10px; align-items:end;}
+  @media (max-width:640px){ .facture-form{ grid-template-columns:1fr 1fr; } }
+
+  /* ---------- chiffres ---------- */
+  .stat-grid{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  @media (max-width:560px){ .stat-grid{ grid-template-columns:1fr; } }
+  .stat-card{ background:var(--paper); color:var(--ink); padding:22px; }
+  .stat-card .eyebrow{ font-family:'Space Mono',monospace; font-size:11px; text-transform:uppercase; letter-spacing:1.5px; color:var(--muted-2);}
+  .stat-card .num{ font-family:'Archivo Black',sans-serif; font-size:38px; margin-top:8px; }
+  .stat-card.money .num{ color:var(--green); }
+  .stat-card.perso .num{ color:var(--red); }
+
+  .footer-note{ max-width:920px; margin:0 auto; padding:0 24px 40px; color:var(--muted); font-size:11.5px; font-family:'Space Mono',monospace;}
+  .footer-note button{ background:none; color:var(--muted); text-decoration:underline; font-size:11.5px; font-family:'Space Mono',monospace; padding:0;}
+
+  .empty{ color:var(--muted-2); font-size:13px; font-family:'Space Mono',monospace; padding:10px 0; }
+  [hidden]{ display:none !important; }
+
+  /* ---------- accordéon semaines ---------- */
+  .week-block{ border:1px solid var(--line); margin-bottom:10px; }
+  .week-header{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    padding:13px 16px; cursor:pointer; user-select:none;
+  }
+  .week-header:hover{ background:rgba(23,22,15,0.04); }
+  .week-header .range{ font-family:'Space Mono',monospace; font-weight:700; font-size:13.5px; }
+  .week-header .range .tag{ background:var(--red); color:var(--paper); font-size:10px; padding:2px 6px; margin-left:8px; letter-spacing:0.5px;}
+  .week-header .summary{ font-family:'Space Mono',monospace; font-size:12px; color:var(--muted-2); text-align:right; flex:1; padding:0 10px;}
+  .week-header .caret{ font-family:'Space Mono',monospace; font-size:16px; font-weight:700; width:16px; text-align:center; flex-shrink:0;}
+  .week-body{ padding:4px 16px 16px; border-top:1px solid var(--line); }
+  .week-body .mini-stats{ display:flex; gap:18px; flex-wrap:wrap; padding:12px 0; font-family:'Space Mono',monospace; font-size:12.5px;}
+  .week-body .mini-stats b{ display:block; font-size:16px; font-family:'Archivo Black',sans-serif; }
+  .week-body .mini-stats .money b{ color:var(--green); }
+  .week-body .mini-stats .perso b{ color:var(--red); }
+</style>
+</head>
+<body>
+
+<div class="storefront"></div>
+
+<!-- ============ CONFIG SCREEN ============ -->
+<div id="config-screen">
+  <div class="brand" style="justify-content:center; margin-bottom:22px;">
+    <div class="brand-badge">LTD</div>
+    <div>
+      <h1 style="font-size:22px;">Registre de service</h1>
+      <p style="margin-top:2px;">Connexion base de données</p>
+    </div>
+  </div>
+  <div class="card">
+    <h2><span class="eyebrow">01</span> Connecter Supabase</h2>
+    <p>Renseigne l'URL et la clé <b>anon public</b> de ton projet Supabase (Project Settings → API). Les tables <code>services</code> et <code>factures</code> doivent exister — voir le script SQL fourni avec ce fichier.</p>
+    <div class="field">
+      <label>URL du projet</label>
+      <input id="cfg-url" type="text" placeholder="https://xxxxxxxx.supabase.co" value="https://uweuexffoitzdqsbxlmc.supabase.co">
+    </div>
+    <div class="field">
+      <label>Clé anon public</label>
+      <input id="cfg-key" type="text" placeholder="eyJhbGciOi..." value="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV3ZXVleGZmb2l0emRxc2J4bG1jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI5MjQzODcsImV4cCI6MjA5ODUwMDM4N30.fqSH9Tu6yx9D8dgn7k9iLat-hnJAWatmdqxKYFwkJc0">
+    </div>
+    <button class="btn yellow block" onclick="connect()">Se connecter</button>
+    <div id="cfg-err" class="err" hidden></div>
+  </div>
+</div>
+
+<!-- ============ APP ============ -->
+<div id="app" hidden>
+  <div class="header">
+    <div class="brand">
+      <div class="brand-badge">LTD</div>
+      <div>
+        <h1>Registre de service</h1>
+        <p>Services · Factures · Chiffres</p>
+      </div>
+    </div>
+    <div class="status-pill">
+      <div id="status-dot" class="dot"></div>
+      <span id="status-text">Hors service</span>
+    </div>
+  </div>
+
+  <div class="tabbar">
+    <button class="tab active" data-tab="services" onclick="switchTab('services')">Services</button>
+    <button class="tab" data-tab="factures" onclick="switchTab('factures')">Factures</button>
+    <button class="tab" data-tab="chiffres" onclick="switchTab('chiffres')">Chiffres</button>
+    <button class="tab" data-tab="recherche" onclick="switchTab('recherche')">Recherche</button>
+  </div>
+
+  <!-- ---- SERVICES ---- -->
+  <div class="panel" id="panel-services">
+    <div class="card">
+      <h2><span class="eyebrow">01</span> Pointeuse</h2>
+      <div class="punch">
+        <div>
+          <div id="punch-timer" class="punch-timer idle">Aucun service en cours</div>
+          <div id="punch-since" class="empty" style="padding-top:4px;"></div>
+        </div>
+        <button id="punch-btn" class="btn yellow punch-btn" onclick="toggleService()">Commencer le service</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2><span class="eyebrow">02</span> Temps de service par semaine</h2>
+      <div id="weekly-bars"></div>
+    </div>
+
+    <div class="card">
+      <h2><span class="eyebrow">03</span> Historique par semaine</h2>
+      <div id="services-semaines"></div>
+    </div>
+  </div>
+
+  <!-- ---- FACTURES ---- -->
+  <div class="panel" id="panel-factures" hidden>
+    <div class="card">
+      <h2><span class="eyebrow">01</span> Nouvelle facture</h2>
+      <div class="facture-form">
+        <div class="field" style="margin-bottom:0;">
+          <label>Nom du produit</label>
+          <input id="f-nom" type="text" placeholder="Ex: Burger">
+        </div>
+        <div class="field" style="margin-bottom:0;">
+          <label>Quantité vendue</label>
+          <input id="f-qte" type="number" min="1" placeholder="20">
+        </div>
+        <div class="field" style="margin-bottom:0;">
+          <label>Prix total vendu ($)</label>
+          <input id="f-prix" type="number" min="0" step="0.01" placeholder="20">
+        </div>
+        <button class="btn yellow" onclick="addFacture()">Ajouter</button>
+      </div>
+      <div id="f-err" class="err" hidden></div>
+    </div>
+
+    <div class="receipt">
+      <div class="receipt-jag" style="transform:rotate(180deg);"></div>
+      <div class="receipt-inner">
+        <div class="receipt-title">LTD</div>
+        <div class="receipt-sub">— TICKET DE VENTE —</div>
+        <div class="receipt-barcode" style="margin:0 0 14px;"></div>
+        <div id="factures-list"></div>
+        <div class="receipt-total">
+          <span>TOTAL</span>
+          <span id="factures-total">$0</span>
+        </div>
+      </div>
+      <div class="receipt-jag"></div>
+    </div>
+  </div>
+
+  <!-- ---- CHIFFRES ---- -->
+  <div class="panel" id="panel-chiffres" hidden>
+    <div class="stat-grid">
+      <div class="stat-card money">
+        <div class="eyebrow">Chiffre d'entreprise</div>
+        <div class="num" id="stat-total">$0</div>
+      </div>
+      <div class="stat-card perso">
+        <div class="eyebrow">Argent personnel (20%)</div>
+        <div class="num" id="stat-perso">$0</div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:18px;">
+      <h2><span class="eyebrow">02</span> Détail par semaine</h2>
+      <div id="chiffres-semaines"></div>
+    </div>
+  </div>
+
+  <!-- ---- RECHERCHE ---- -->
+  <div class="panel" id="panel-recherche" hidden>
+    <div class="card">
+      <h2><span class="eyebrow">01</span> Rechercher un produit</h2>
+      <div class="facture-form" style="grid-template-columns:1fr auto;">
+        <div class="field" style="margin-bottom:0;">
+          <label>Nom du produit</label>
+          <input id="r-nom" type="text" placeholder="Ex: Burger" onkeydown="if(event.key==='Enter') searchProduit()">
+        </div>
+        <button class="btn yellow" onclick="searchProduit()">Rechercher</button>
+      </div>
+    </div>
+
+    <div id="recherche-result"></div>
+  </div>
+
+  <div class="footer-note">
+    Connecté à Supabase · <button onclick="disconnect()">changer de projet / déconnexion</button>
+  </div>
+</div>
+
+<script>
+const SB_URL_KEY = 'ltd_sb_url';
+const SB_ANON_KEY = 'ltd_sb_anon';
+const DEFAULT_URL = 'https://uweuexffoitzdqsbxlmc.supabase.co';
+const DEFAULT_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV3ZXVleGZmb2l0emRxc2J4bG1jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI5MjQzODcsImV4cCI6MjA5ODUwMDM4N30.fqSH9Tu6yx9D8dgn7k9iLat-hnJAWatmdqxKYFwkJc0';
+
+let sb = null;
+let services = [];
+let factures = [];
+let liveTimerHandle = null;
+
+// ---------- connexion ----------
+async function connect(){
+  const url = document.getElementById('cfg-url').value.trim();
+  const key = document.getElementById('cfg-key').value.trim();
+  const errEl = document.getElementById('cfg-err');
+  errEl.hidden = true;
+  if(!url || !key){
+    errEl.textContent = "Merci de renseigner l'URL et la clé.";
+    errEl.hidden = false;
+    return;
+  }
+  try{
+    sb = window.supabase.createClient(url, key);
+    // test simple : lecture de la table services
+    const { error } = await sb.from('services').select('id').limit(1);
+    if(error) throw error;
+    localStorage.setItem(SB_URL_KEY, url);
+    localStorage.setItem(SB_ANON_KEY, key);
+    document.getElementById('config-screen').hidden = true;
+    document.getElementById('app').hidden = false;
+    await loadAll();
+  }catch(e){
+    errEl.textContent = "Connexion impossible : " + (e.message || e);
+    errEl.hidden = false;
+  }
+}
+
+function disconnect(){
+  localStorage.removeItem(SB_URL_KEY);
+  localStorage.removeItem(SB_ANON_KEY);
+  location.reload();
+}
+
+async function tryAutoConnect(){
+  const url = localStorage.getItem(SB_URL_KEY) || DEFAULT_URL;
+  const key = localStorage.getItem(SB_ANON_KEY) || DEFAULT_KEY;
+  if(url && key){
+    document.getElementById('cfg-url').value = url;
+    document.getElementById('cfg-key').value = key;
+    await connect();
+  }
+}
+
+// ---------- data loading ----------
+async function loadAll(){
+  const [sRes, fRes] = await Promise.all([
+    sb.from('services').select('*').order('started_at', { ascending:false }),
+    sb.from('factures').select('*').order('created_at', { ascending:false })
+  ]);
+  services = sRes.data || [];
+  factures = fRes.data || [];
+  renderAll();
+}
+
+function renderAll(){
+  renderPunch();
+  renderWeeklyBars();
+  renderServicesHistory();
+  renderFactures();
+  renderChiffres();
+}
+
+// ---------- tabs ----------
+function switchTab(tab){
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+  ['services','factures','chiffres','recherche'].forEach(p => {
+    document.getElementById('panel-' + p).hidden = (p !== tab);
+  });
+}
+
+// ---------- pointeuse ----------
+function getActiveService(){
+  return services.find(s => !s.ended_at) || null;
+}
+
+async function toggleService(){
+  const active = getActiveService();
+  const btn = document.getElementById('punch-btn');
+  btn.disabled = true;
+  try{
+    if(active){
+      const { error } = await sb.from('services').update({ ended_at: new Date().toISOString() }).eq('id', active.id);
+      if(error) throw error;
+    } else {
+      const { error } = await sb.from('services').insert({ started_at: new Date().toISOString() });
+      if(error) throw error;
+    }
+    await loadAll();
+  }catch(e){
+    alert("Erreur pointeuse : " + (e.message || e));
+  }finally{
+    btn.disabled = false;
+  }
+}
+
+function renderPunch(){
+  const active = getActiveService();
+  const dot = document.getElementById('status-dot');
+  const text = document.getElementById('status-text');
+  const btn = document.getElementById('punch-btn');
+  const timerEl = document.getElementById('punch-timer');
+  const sinceEl = document.getElementById('punch-since');
+
+  if(liveTimerHandle){ clearInterval(liveTimerHandle); liveTimerHandle = null; }
+
+  if(active){
+    dot.classList.add('on');
+    text.textContent = 'En service';
+    btn.textContent = 'Terminer le service';
+    btn.classList.add('red'); btn.classList.remove('yellow');
+    timerEl.classList.remove('idle');
+    sinceEl.textContent = "Depuis " + new Date(active.started_at).toLocaleString('fr-FR');
+
+    const update = () => {
+      const secs = Math.floor((Date.now() - new Date(active.started_at).getTime())/1000);
+      timerEl.textContent = formatDuration(secs);
+    };
+    update();
+    liveTimerHandle = setInterval(update, 1000);
+  } else {
+    dot.classList.remove('on');
+    text.textContent = 'Hors service';
+    btn.textContent = 'Commencer le service';
+    btn.classList.add('yellow'); btn.classList.remove('red');
+    timerEl.classList.add('idle');
+    timerEl.textContent = 'Aucun service en cours';
+    sinceEl.textContent = '';
+  }
+}
+
+function formatDuration(totalSeconds){
+  const h = Math.floor(totalSeconds/3600);
+  const m = Math.floor((totalSeconds%3600)/60);
+  const s = totalSeconds%60;
+  return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');
+}
+
+function serviceDurationSeconds(s){
+  const start = new Date(s.started_at).getTime();
+  const end = s.ended_at ? new Date(s.ended_at).getTime() : Date.now();
+  return Math.max(0, Math.floor((end - start)/1000));
+}
+
+// ---------- semaine ISO ----------
+function isoWeekInfo(date){
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = (d.getUTCDay() + 6) % 7;
+  d.setUTCDate(d.getUTCDate() - dayNum + 3);
+  const firstThursday = new Date(Date.UTC(d.getUTCFullYear(),0,4));
+  const week = 1 + Math.round(((d - firstThursday) / 86400000 - 3 + ((firstThursday.getUTCDay()+6)%7)) / 7);
+  return { year: d.getUTCFullYear(), week };
+}
+
+function mondayOfIsoWeek(year, week){
+  const simple = new Date(Date.UTC(year, 0, 1 + (week - 1) * 7));
+  const dow = simple.getUTCDay() || 7; // dimanche -> 7
+  simple.setUTCDate(simple.getUTCDate() - dow + 1);
+  return simple;
+}
+
+function weekRangeLabel(year, week){
+  const monday = mondayOfIsoWeek(year, week);
+  const sunday = new Date(monday);
+  sunday.setUTCDate(monday.getUTCDate() + 6);
+  const fmt = d => String(d.getUTCDate()).padStart(2,'0') + '/' + String(d.getUTCMonth()+1).padStart(2,'0');
+  return fmt(monday) + ' au ' + fmt(sunday);
+}
+
+function toggleWeek(headerEl){
+  const body = headerEl.nextElementSibling;
+  body.hidden = !body.hidden;
+  headerEl.querySelector('.caret').textContent = body.hidden ? '+' : '\u2212';
+}
+
+function renderWeeklyBars(){
+  const container = document.getElementById('weekly-bars');
+  if(services.length === 0){
+    container.innerHTML = '<div class="empty">Aucun service enregistré pour le moment.</div>';
+    return;
+  }
+  const map = {};
+  services.forEach(s => {
+    const info = isoWeekInfo(new Date(s.started_at));
+    const key = info.year + '-S' + String(info.week).padStart(2,'0');
+    map[key] = (map[key] || 0) + serviceDurationSeconds(s);
+  });
+  const nowInfo = isoWeekInfo(new Date());
+  const currentKey = nowInfo.year + '-S' + String(nowInfo.week).padStart(2,'0');
+
+  const entries = Object.entries(map).sort((a,b) => b[0].localeCompare(a[0])).slice(0,8);
+  const maxVal = Math.max(...entries.map(e => e[1]), 1);
+
+  container.innerHTML = entries.map(([key, secs]) => {
+    const pct = Math.max(4, Math.round((secs/maxVal)*100));
+    const isCurrent = key === currentKey;
+    return `<div class="barrow ${isCurrent ? 'current' : ''}">
+      <div class="lbl">${key}${isCurrent ? ' (en cours)' : ''}</div>
+      <div class="track"><div class="fill" style="width:${pct}%"></div></div>
+      <div class="val">${formatDuration(secs).slice(0,5)}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderServicesHistory(){
+  const container = document.getElementById('services-semaines');
+  if(services.length === 0){
+    container.innerHTML = '<div class="empty">Aucun service enregistré pour le moment.</div>';
+    return;
+  }
+  const map = {};
+  services.forEach(s => {
+    const info = isoWeekInfo(new Date(s.started_at));
+    const key = info.year + '-S' + String(info.week).padStart(2,'0');
+    if(!map[key]) map[key] = { year: info.year, week: info.week, sessions: [] };
+    map[key].sessions.push(s);
+  });
+  const nowInfo = isoWeekInfo(new Date());
+  const currentKey = nowInfo.year + '-S' + String(nowInfo.week).padStart(2,'0');
+
+  const keys = Object.keys(map).sort((a,b) => b.localeCompare(a));
+
+  container.innerHTML = keys.map(key => {
+    const g = map[key];
+    const isCurrent = key === currentKey;
+    const totalSecs = g.sessions.reduce((acc,s) => acc + serviceDurationSeconds(s), 0);
+    const rows = g.sessions
+      .sort((a,b) => new Date(b.started_at) - new Date(a.started_at))
+      .map(s => {
+        const start = new Date(s.started_at);
+        const end = s.ended_at ? new Date(s.ended_at) : null;
+        return `<tr>
+          <td>${start.toLocaleDateString('fr-FR')}</td>
+          <td>${start.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}</td>
+          <td>${end ? end.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}) : '— en cours —'}</td>
+          <td style="text-align:right;">${formatDuration(serviceDurationSeconds(s)).slice(0,5)}</td>
+        </tr>`;
+      }).join('');
+    return `<div class="week-block">
+      <div class="week-header" onclick="toggleWeek(this)">
+        <span class="range">${weekRangeLabel(g.year, g.week)}${isCurrent ? '<span class="tag">EN COURS</span>' : ''}</span>
+        <span class="summary">${formatDuration(totalSecs).slice(0,5)} · ${g.sessions.length} session(s)</span>
+        <span class="caret">${isCurrent ? '\u2212' : '+'}</span>
+      </div>
+      <div class="week-body" ${isCurrent ? '' : 'hidden'}>
+        <table>
+          <thead><tr><th>Date</th><th>Début</th><th>Fin</th><th style="text-align:right;">Durée</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ---------- factures ----------
+async function addFacture(){
+  const nom = document.getElementById('f-nom').value.trim();
+  const qte = parseFloat(document.getElementById('f-qte').value);
+  const prix = parseFloat(document.getElementById('f-prix').value);
+  const errEl = document.getElementById('f-err');
+  errEl.hidden = true;
+
+  if(!nom || !qte || qte <= 0 || isNaN(prix) || prix < 0){
+    errEl.textContent = "Renseigne un nom, une quantité (>0) et un prix total valides.";
+    errEl.hidden = false;
+    return;
+  }
+  try{
+    const { error } = await sb.from('factures').insert({ nom, quantite: qte, prix_total: prix });
+    if(error) throw error;
+    document.getElementById('f-nom').value = '';
+    document.getElementById('f-qte').value = '';
+    document.getElementById('f-prix').value = '';
+    await loadAll();
+  }catch(e){
+    errEl.textContent = "Erreur : " + (e.message || e);
+    errEl.hidden = false;
+  }
+}
+
+async function deleteFacture(id){
+  if(!confirm('Supprimer cette facture ?')) return;
+  const { error } = await sb.from('factures').delete().eq('id', id);
+  if(error){ alert('Erreur : ' + error.message); return; }
+  await loadAll();
+}
+
+function money(n){
+  return '$' + n.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+}
+
+function renderFactures(){
+  const listEl = document.getElementById('factures-list');
+  const totalEl = document.getElementById('factures-total');
+  if(factures.length === 0){
+    listEl.innerHTML = '<div class="empty">Aucune facture enregistrée. Ajoute ta première vente ci-dessus.</div>';
+    totalEl.textContent = money(0);
+    return;
+  }
+  let total = 0;
+  listEl.innerHTML = factures.map(f => {
+    total += Number(f.prix_total);
+    return `<div class="receipt-line">
+      <span class="name">${escapeHtml(f.nom)}</span>
+      <span class="qty">x${f.quantite}</span>
+      <span class="dots"></span>
+      <span class="amt">${money(Number(f.prix_total))}</span>
+      <button class="del" onclick="deleteFacture('${f.id}')">suppr.</button>
+    </div>`;
+  }).join('');
+  totalEl.textContent = money(total);
+}
+
+function escapeHtml(str){
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+
+// ---------- chiffres ----------
+function renderChiffres(){
+  const total = factures.reduce((acc,f) => acc + Number(f.prix_total), 0);
+  const perso = total * 0.2;
+  document.getElementById('stat-total').textContent = money(total);
+  document.getElementById('stat-perso').textContent = money(perso);
+
+  const container = document.getElementById('chiffres-semaines');
+  if(factures.length === 0){
+    container.innerHTML = '<div class="empty">Aucune facture enregistrée pour le moment.</div>';
+    return;
+  }
+
+  const map = {};
+  factures.forEach(f => {
+    const info = isoWeekInfo(new Date(f.created_at));
+    const key = info.year + '-S' + String(info.week).padStart(2,'0');
+    if(!map[key]) map[key] = { year: info.year, week: info.week, factures: [] };
+    map[key].factures.push(f);
+  });
+  const nowInfo = isoWeekInfo(new Date());
+  const currentKey = nowInfo.year + '-S' + String(nowInfo.week).padStart(2,'0');
+
+  const keys = Object.keys(map).sort((a,b) => b.localeCompare(a));
+
+  container.innerHTML = keys.map(key => {
+    const g = map[key];
+    const isCurrent = key === currentKey;
+    const weekTotal = g.factures.reduce((acc,f) => acc + Number(f.prix_total), 0);
+    const weekPerso = weekTotal * 0.2;
+
+    const produitsMap = {};
+    g.factures.forEach(f => {
+      if(!produitsMap[f.nom]) produitsMap[f.nom] = { qte:0, total:0 };
+      produitsMap[f.nom].qte += Number(f.quantite);
+      produitsMap[f.nom].total += Number(f.prix_total);
+    });
+    const produitsRows = Object.entries(produitsMap)
+      .sort((a,b) => b[1].total - a[1].total)
+      .map(([nom,v]) => `<tr>
+        <td>${escapeHtml(nom)}</td>
+        <td style="text-align:right;">${v.qte}</td>
+        <td style="text-align:right;">${money(v.total)}</td>
+      </tr>`).join('');
+
+    return `<div class="week-block">
+      <div class="week-header" onclick="toggleWeek(this)">
+        <span class="range">${weekRangeLabel(g.year, g.week)}${isCurrent ? '<span class="tag">EN COURS</span>' : ''}</span>
+        <span class="summary">${money(weekTotal)} · ${g.factures.length} facture(s)</span>
+        <span class="caret">${isCurrent ? '\u2212' : '+'}</span>
+      </div>
+      <div class="week-body" ${isCurrent ? '' : 'hidden'}>
+        <div class="mini-stats">
+          <div class="money"><span>Chiffre d'entreprise</span><b>${money(weekTotal)}</b></div>
+          <div class="perso"><span>Chiffre personnel (20%)</span><b>${money(weekPerso)}</b></div>
+          <div><span>Factures</span><b>${g.factures.length}</b></div>
+        </div>
+        <table>
+          <thead><tr><th>Produit</th><th style="text-align:right;">Qté</th><th style="text-align:right;">Total vendu</th></tr></thead>
+          <tbody>${produitsRows}</tbody>
+        </table>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ---------- recherche produit ----------
+function searchProduit(){
+  const term = document.getElementById('r-nom').value.trim().toLowerCase();
+  const resultEl = document.getElementById('recherche-result');
+  if(!term){
+    resultEl.innerHTML = '<div class="card"><div class="empty">Tape un nom de produit pour lancer la recherche.</div></div>';
+    return;
+  }
+
+  const matches = factures.filter(f => f.nom.toLowerCase().includes(term));
+
+  if(matches.length === 0){
+    resultEl.innerHTML = `<div class="card"><div class="empty">Aucune vente trouvée pour "${escapeHtml(document.getElementById('r-nom').value.trim())}".</div></div>`;
+    return;
+  }
+
+  const qteTotale = matches.reduce((acc,f) => acc + Number(f.quantite), 0);
+  const chiffreEntreprise = matches.reduce((acc,f) => acc + Number(f.prix_total), 0);
+  const chiffrePerso = chiffreEntreprise * 0.2;
+
+  // détail par nom exact si plusieurs variantes matchent le terme
+  const parNom = {};
+  matches.forEach(f => {
+    if(!parNom[f.nom]) parNom[f.nom] = { qte:0, total:0 };
+    parNom[f.nom].qte += Number(f.quantite);
+    parNom[f.nom].total += Number(f.prix_total);
+  });
+  const noms = Object.keys(parNom);
+
+  resultEl.innerHTML = `
+    <div class="stat-grid">
+      <div class="stat-card">
+        <div class="eyebrow">Produit</div>
+        <div class="num" style="font-size:22px;">${escapeHtml(noms.length === 1 ? noms[0] : document.getElementById('r-nom').value.trim())}</div>
+      </div>
+      <div class="stat-card">
+        <div class="eyebrow">Quantité totale vendue</div>
+        <div class="num">${qteTotale}</div>
+      </div>
+      <div class="stat-card money">
+        <div class="eyebrow">Chiffre d'entreprise</div>
+        <div class="num">${money(chiffreEntreprise)}</div>
+      </div>
+      <div class="stat-card perso">
+        <div class="eyebrow">Chiffre personnel (20%)</div>
+        <div class="num">${money(chiffrePerso)}</div>
+      </div>
+    </div>
+    ${noms.length > 1 ? `<div class="card" style="margin-top:16px;">
+      <h2><span class="eyebrow">02</span> Détail par variante</h2>
+      <table>
+        <thead><tr><th>Nom exact</th><th style="text-align:right;">Qté</th><th style="text-align:right;">Total vendu</th></tr></thead>
+        <tbody>${noms.map(n => `<tr>
+          <td>${escapeHtml(n)}</td>
+          <td style="text-align:right;">${parNom[n].qte}</td>
+          <td style="text-align:right;">${money(parNom[n].total)}</td>
+        </tr>`).join('')}</tbody>
+      </table>
+    </div>` : ''}
+  `;
+}
+
+tryAutoConnect();
+</script>
+
+</body>
+</html>
