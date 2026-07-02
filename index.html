@@ -258,6 +258,51 @@
 </div>
 
 <!-- ============ APP ============ -->
+<div id="login-screen" hidden style="max-width:420px;margin:60px auto;padding:0 20px;">
+  <div class="card">
+    <h2>Connexion</h2>
+    <div class="field"><label>Nom d'utilisateur</label><input id="login-user" type="text"></div>
+    <div class="field"><label>Mot de passe</label><input id="login-pass" type="password"></div>
+    <button class="btn yellow block" onclick="doLogin()">Se connecter</button>
+    <div id="login-err" class="err" hidden></div>
+  </div>
+</div>
+
+<div id="patron-app" hidden>
+  <div class="header"><div class="brand"><div class="brand-badge">LTD</div><div><h1>Espace patronne</h1></div></div><button class="btn ghost" onclick="logout()">Déconnexion</button></div>
+  <div class="tabbar">
+    <button class="tab active" data-ptab="travailleur" onclick="switchPTab('travailleur')">Travailleur</button>
+    <button class="tab" data-ptab="gestion" onclick="switchPTab('gestion')">Gestion Travailleur</button>
+    <button class="tab" data-ptab="livraison" onclick="switchPTab('livraison')">Livraison</button>
+  </div>
+
+  <div class="panel" id="ppanel-travailleur">
+    <div id="travailleurs-list-wrap">
+      <div class="card"><h2>Travailleurs</h2><div id="travailleurs-list"></div></div>
+    </div>
+    <div id="travailleur-detail-wrap" hidden>
+      <button class="btn ghost" style="margin-bottom:14px;" onclick="backToList()">← Retour</button>
+      <div id="travailleur-detail"></div>
+    </div>
+  </div>
+
+  <div class="panel" id="ppanel-gestion" hidden>
+    <div class="card">
+      <h2>Créer un membre</h2>
+      <div class="field"><label>Nom et prénom</label><input id="t-nom" type="text"></div>
+      <div class="field"><label>Nom d'utilisateur</label><input id="t-user" type="text"></div>
+      <div class="field"><label>Mot de passe</label><input id="t-pass" type="text"></div>
+      <button class="btn yellow" onclick="createTravailleur()">Créer</button>
+      <div id="t-err" class="err" hidden></div>
+    </div>
+    <div class="card"><h2>Membres</h2><div id="gestion-list"></div></div>
+  </div>
+
+  <div class="panel" id="ppanel-livraison" hidden>
+    <div class="card"><h2>Toutes les livraisons</h2><div id="patron-livraisons-list"></div></div>
+  </div>
+</div>
+
 <div id="app" hidden>
   <div class="header">
     <div class="brand">
@@ -271,6 +316,7 @@
       <div id="status-dot" class="dot"></div>
       <span id="status-text">Hors service</span>
     </div>
+    <button class="btn ghost" onclick="logout()">Déconnexion</button>
   </div>
 
   <div class="tabbar">
@@ -278,6 +324,7 @@
     <button class="tab" data-tab="factures" onclick="switchTab('factures')">Factures</button>
     <button class="tab" data-tab="chiffres" onclick="switchTab('chiffres')">Chiffres</button>
     <button class="tab" data-tab="recherche" onclick="switchTab('recherche')">Recherche</button>
+    <button class="tab" data-tab="livraison" onclick="switchTab('livraison')">Livraison</button>
   </div>
 
   <!-- ---- SERVICES ---- -->
@@ -380,6 +427,19 @@
   <div class="footer-note">
     Connecté à Supabase · <button onclick="disconnect()">changer de projet / déconnexion</button>
   </div>
+
+  <div class="panel" id="panel-livraison" hidden>
+    <div class="card">
+      <h2>Nouvelle livraison</h2>
+      <div class="field"><label>Heure de départ</label><input id="l-depart" type="datetime-local"></div>
+      <div class="field"><label>Heure de retour</label><input id="l-retour" type="datetime-local"></div>
+      <div id="l-produits"></div>
+      <button class="btn ghost" onclick="addProduitLigne()">+ Ajouter un produit</button>
+      <div style="margin-top:14px;"><button class="btn yellow" onclick="submitLivraison()">Enregistrer la livraison</button></div>
+      <div id="l-err" class="err" hidden></div>
+    </div>
+    <div class="card"><h2>Historique de mes livraisons</h2><div id="livraisons-list"></div></div>
+  </div>
 </div>
 
 <script>
@@ -387,6 +447,128 @@ const SB_URL_KEY = 'ltd_sb_url';
 const SB_ANON_KEY = 'ltd_sb_anon';
 const DEFAULT_URL = 'https://uweuexffoitzdqsbxlmc.supabase.co';
 const DEFAULT_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV3ZXVleGZmb2l0emRxc2J4bG1jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI5MjQzODcsImV4cCI6MjA5ODUwMDM4N30.fqSH9Tu6yx9D8dgn7k9iLat-hnJAWatmdqxKYFwkJc0';
+let currentUser = null;
+
+async function sha256Hex(str){
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+
+async function doLogin(){
+  const u = document.getElementById('login-user').value.trim();
+  const p = document.getElementById('login-pass').value;
+  const errEl = document.getElementById('login-err');
+  errEl.hidden = true;
+  if(!u || !p){ errEl.textContent = 'Renseigne un identifiant et un mot de passe.'; errEl.hidden = false; return; }
+  const hash = await sha256Hex(p);
+  const { data, error } = await sb.from('travailleurs').select('*').eq('username', u).eq('password_hash', hash).maybeSingle();
+  if(error || !data){ errEl.textContent = 'Identifiant ou mot de passe incorrect.'; errEl.hidden = false; return; }
+  currentUser = data;
+  document.getElementById('login-screen').hidden = true;
+  if(data.role === 'patron'){
+    document.getElementById('patron-app').hidden = false;
+    await loadTravailleurs();
+  } else {
+    document.getElementById('app').hidden = false;
+    await loadAll();
+  }
+}
+
+function logout(){ currentUser = null; location.reload(); }
+
+async function loadTravailleurs(){
+  const { data } = await sb.from('travailleurs').select('*').eq('role','travailleur').order('created_at');
+  window._travailleurs = data || [];
+  const listEl = document.getElementById('travailleurs-list');
+  if(!window._travailleurs.length){ listEl.innerHTML = '<div class="empty">Aucun travailleur créé pour le moment.</div>'; return; }
+  listEl.innerHTML = window._travailleurs.map(t => `<div class="week-block"><div class="week-header" onclick="openTravailleur('${t.id}')" style="cursor:pointer;"><span class="range">${escapeHtml(t.nom_complet)}</span><span class="summary">@${escapeHtml(t.username)}</span><span class="caret">→</span></div></div>`).join('');
+}
+
+async function createTravailleur(){
+  const nom = document.getElementById('t-nom').value.trim();
+  const user = document.getElementById('t-user').value.trim();
+  const pass = document.getElementById('t-pass').value;
+  const errEl = document.getElementById('t-err');
+  errEl.hidden = true;
+  if(!nom || !user || !pass){ errEl.textContent = 'Remplis tous les champs.'; errEl.hidden = false; return; }
+  const hash = await sha256Hex(pass);
+  const { error } = await sb.from('travailleurs').insert({ nom_complet: nom, username: user, password_hash: hash, role: 'travailleur' });
+  if(error){ errEl.textContent = 'Erreur : ' + error.message; errEl.hidden = false; return; }
+  document.getElementById('t-nom').value = '';
+  document.getElementById('t-user').value = '';
+  document.getElementById('t-pass').value = '';
+  await loadTravailleurs();
+}
+
+async function openTravailleur(id){
+  const t = window._travailleurs.find(x => x.id === id);
+  const [sRes, fRes, lRes] = await Promise.all([
+    sb.from('services').select('*').eq('travailleur_id', id).order('started_at', { ascending:false }),
+    sb.from('factures').select('*').eq('travailleur_id', id).order('created_at', { ascending:false }),
+    sb.from('livraisons').select('*').eq('travailleur_id', id).order('created_at', { ascending:false })
+  ]);
+  const svcs = sRes.data || [];
+  const facs = fRes.data || [];
+  const livs = lRes.data || [];
+  const total = facs.reduce((a,f)=>a+Number(f.prix_total),0) + livs.reduce((a,l)=>a+Number(l.total),0);
+  const perso = total*0.2;
+  const totalSecs = svcs.reduce((a,s)=>a+serviceDurationSeconds(s),0);
+  document.getElementById('travailleur-detail').innerHTML = `
+    <div class="card"><h2>${escapeHtml(t.nom_complet)} (@${escapeHtml(t.username)})</h2></div>
+    <div class="stat-grid">
+      <div class="stat-card money"><div class="eyebrow">Chiffre d'entreprise</div><div class="num">${money(total)}</div></div>
+      <div class="stat-card perso"><div class="eyebrow">Chiffre personnel (20%)</div><div class="num">${money(perso)}</div></div>
+    </div>
+    <div class="card"><h2>Heures de service (total)</h2><div>${formatDuration(totalSecs).slice(0,5)}</div></div>
+    <div class="card"><h2>Détail factures</h2>${facs.length ? facs.map(f=>`<div class="receipt-line"><span class="name">${escapeHtml(f.nom)}</span><span class="qty">x${f.quantite}</span><span class="dots"></span><span class="amt">${money(Number(f.prix_total))}</span></div>`).join('') : '<div class="empty">Aucune facture.</div>'}</div>
+    <div class="card"><h2>Détail livraisons</h2>${livs.length ? livs.map(l=>`<div class="week-block"><div class="week-header"><span class="range">${new Date(l.heure_depart).toLocaleString('fr-FR')} → ${new Date(l.heure_retour).toLocaleString('fr-FR')}</span><span class="summary">${money(Number(l.total))}</span></div><div class="week-body">${l.produits.map(p=>`<div class="receipt-line"><span class="name">${escapeHtml(p.nom)}</span><span class="qty">x${p.quantite}</span><span class="dots"></span><span class="amt">${money(Number(p.prix))}</span></div>`).join('')}</div></div>`).join('') : '<div class="empty">Aucune livraison.</div>'}</div>
+  `;
+  document.getElementById('travailleurs-list-wrap').hidden = true;
+  document.getElementById('travailleur-detail-wrap').hidden = false;
+}
+
+function renderGestionList(){
+  const list = window._travailleurs || [];
+  const el = document.getElementById('gestion-list');
+  if(!list.length){ el.innerHTML = '<div class="empty">Aucun travailleur créé.</div>'; return; }
+  el.innerHTML = list.map(t => `<div class="week-block"><div class="week-header"><span class="range">${escapeHtml(t.nom_complet)}</span><span class="summary">@${escapeHtml(t.username)}</span></div>
+    <div class="week-body" id="edit-${t.id}" hidden>
+      <div class="field"><label>Nom et prénom</label><input id="e-nom-${t.id}" type="text" value="${escapeHtml(t.nom_complet)}"></div>
+      <div class="field"><label>Nom d'utilisateur</label><input id="e-user-${t.id}" type="text" value="${escapeHtml(t.username)}"></div>
+      <div class="field"><label>Nouveau mot de passe (laisser vide pour ne pas changer)</label><input id="e-pass-${t.id}" type="text"></div>
+      <button class="btn yellow" onclick="saveTravailleur('${t.id}')">Enregistrer</button>
+    </div>
+    <div style="display:flex; gap:8px; padding:0 16px 14px;">
+      <button class="btn ghost" onclick="document.getElementById('edit-${t.id}').hidden = !document.getElementById('edit-${t.id}').hidden">Modifier</button>
+      <button class="btn red" onclick="deleteTravailleur('${t.id}')">Supprimer</button>
+    </div>
+  </div>`).join('');
+}
+
+async function saveTravailleur(id){
+  const nom = document.getElementById('e-nom-'+id).value.trim();
+  const user = document.getElementById('e-user-'+id).value.trim();
+  const pass = document.getElementById('e-pass-'+id).value;
+  const update = { nom_complet: nom, username: user };
+  if(pass) update.password_hash = await sha256Hex(pass);
+  const { error } = await sb.from('travailleurs').update(update).eq('id', id);
+  if(error){ alert('Erreur : ' + error.message); return; }
+  await loadTravailleurs();
+  renderGestionList();
+}
+
+async function deleteTravailleur(id){
+  if(!confirm('Supprimer ce travailleur ? Ses données resteront en base mais ne seront plus visibles.')) return;
+  const { error } = await sb.from('travailleurs').delete().eq('id', id);
+  if(error){ alert('Erreur : ' + error.message); return; }
+  await loadTravailleurs();
+  renderGestionList();
+}
+
+function backToList(){
+  document.getElementById('travailleurs-list-wrap').hidden = false;
+  document.getElementById('travailleur-detail-wrap').hidden = true;
+}
 
 let sb = null;
 let services = [];
@@ -412,8 +594,7 @@ async function connect(){
     localStorage.setItem(SB_URL_KEY, url);
     localStorage.setItem(SB_ANON_KEY, key);
     document.getElementById('config-screen').hidden = true;
-    document.getElementById('app').hidden = false;
-    await loadAll();
+    document.getElementById('login-screen').hidden = false;
   }catch(e){
     errEl.textContent = "Connexion impossible : " + (e.message || e);
     errEl.hidden = false;
@@ -439,11 +620,12 @@ async function tryAutoConnect(){
 // ---------- data loading ----------
 async function loadAll(){
   const [sRes, fRes] = await Promise.all([
-    sb.from('services').select('*').order('started_at', { ascending:false }),
-    sb.from('factures').select('*').order('created_at', { ascending:false })
+    sb.from('services').select('*').eq('travailleur_id', currentUser.id).order('started_at', { ascending:false }),
+    sb.from('factures').select('*').eq('travailleur_id', currentUser.id).order('created_at', { ascending:false })
   ]);
   services = sRes.data || [];
   factures = fRes.data || [];
+  await loadLivraisons();
   renderAll();
 }
 
@@ -458,9 +640,18 @@ function renderAll(){
 // ---------- tabs ----------
 function switchTab(tab){
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
-  ['services','factures','chiffres','recherche'].forEach(p => {
+  ['services','factures','chiffres','recherche','livraison'].forEach(p => {
     document.getElementById('panel-' + p).hidden = (p !== tab);
   });
+}
+
+function switchPTab(tab){
+  document.querySelectorAll('[data-ptab]').forEach(t => t.classList.toggle('active', t.dataset.ptab === tab));
+  ['travailleur','gestion','livraison'].forEach(p => {
+    document.getElementById('ppanel-' + p).hidden = (p !== tab);
+  });
+  if(tab === 'gestion') renderGestionList();
+  if(tab === 'livraison') loadPatronLivraisons();
 }
 
 // ---------- pointeuse ----------
@@ -477,7 +668,7 @@ async function toggleService(){
       const { error } = await sb.from('services').update({ ended_at: new Date().toISOString() }).eq('id', active.id);
       if(error) throw error;
     } else {
-      const { error } = await sb.from('services').insert({ started_at: new Date().toISOString() });
+      const { error } = await sb.from('services').insert({ started_at: new Date().toISOString(), travailleur_id: currentUser.id });
       if(error) throw error;
     }
     await loadAll();
@@ -660,7 +851,7 @@ async function addFacture(){
     return;
   }
   try{
-    const { error } = await sb.from('factures').insert({ nom, quantite: qte, prix_total: prix });
+    const { error } = await sb.from('factures').insert({ nom, quantite: qte, prix_total: prix, travailleur_id: currentUser.id });
     if(error) throw error;
     document.getElementById('f-nom').value = '';
     document.getElementById('f-qte').value = '';
@@ -713,13 +904,15 @@ function escapeHtml(str){
 
 // ---------- chiffres ----------
 function renderChiffres(){
-  const total = factures.reduce((acc,f) => acc + Number(f.prix_total), 0);
+  const totalFactures = factures.reduce((acc,f) => acc + Number(f.prix_total), 0);
+  const totalLivraisons = livraisons.reduce((acc,l) => acc + Number(l.total), 0);
+  const total = totalFactures + totalLivraisons;
   const perso = total * 0.2;
   document.getElementById('stat-total').textContent = money(total);
   document.getElementById('stat-perso').textContent = money(perso);
 
   const container = document.getElementById('chiffres-semaines');
-  if(factures.length === 0){
+  if(factures.length === 0 && livraisons.length === 0){
     container.innerHTML = '<div class="empty">Aucune facture enregistrée pour le moment.</div>';
     return;
   }
@@ -728,8 +921,18 @@ function renderChiffres(){
   factures.forEach(f => {
     const info = isoWeekInfo(new Date(f.created_at));
     const key = info.year + '-S' + String(info.week).padStart(2,'0');
-    if(!map[key]) map[key] = { year: info.year, week: info.week, factures: [] };
+    if(!map[key]) map[key] = { year: info.year, week: info.week, factures: [], count: 0, total: 0 };
     map[key].factures.push(f);
+    map[key].count++;
+    map[key].total += Number(f.prix_total);
+  });
+  livraisons.forEach(l => {
+    const info = isoWeekInfo(new Date(l.created_at));
+    const key = info.year + '-S' + String(info.week).padStart(2,'0');
+    if(!map[key]) map[key] = { year: info.year, week: info.week, factures: [], count: 0, total: 0 };
+    (l.produits || []).forEach(p => map[key].factures.push({ nom: p.nom, quantite: p.quantite, prix_total: p.prix }));
+    map[key].count++;
+    map[key].total += Number(l.total);
   });
   const nowInfo = isoWeekInfo(new Date());
   const currentKey = nowInfo.year + '-S' + String(nowInfo.week).padStart(2,'0');
@@ -739,7 +942,7 @@ function renderChiffres(){
   container.innerHTML = keys.map(key => {
     const g = map[key];
     const isCurrent = key === currentKey;
-    const weekTotal = g.factures.reduce((acc,f) => acc + Number(f.prix_total), 0);
+    const weekTotal = g.total;
     const weekPerso = weekTotal * 0.2;
 
     const produitsMap = {};
@@ -759,14 +962,14 @@ function renderChiffres(){
     return `<div class="week-block">
       <div class="week-header" onclick="toggleWeek(this)">
         <span class="range">${weekRangeLabel(g.year, g.week)}${isCurrent ? '<span class="tag">EN COURS</span>' : ''}</span>
-        <span class="summary">${money(weekTotal)} · ${g.factures.length} facture(s)</span>
+        <span class="summary">${money(weekTotal)} · ${g.count} entrée(s)</span>
         <span class="caret">${isCurrent ? '\u2212' : '+'}</span>
       </div>
       <div class="week-body" ${isCurrent ? '' : 'hidden'}>
         <div class="mini-stats">
           <div class="money"><span>Chiffre d'entreprise</span><b>${money(weekTotal)}</b></div>
           <div class="perso"><span>Chiffre personnel (20%)</span><b>${money(weekPerso)}</b></div>
-          <div><span>Factures</span><b>${g.factures.length}</b></div>
+          <div><span>Entrées</span><b>${g.count}</b></div>
         </div>
         <table>
           <thead><tr><th>Produit</th><th style="text-align:right;">Qté</th><th style="text-align:right;">Total vendu</th></tr></thead>
@@ -840,6 +1043,79 @@ function searchProduit(){
 }
 
 tryAutoConnect();
+
+// ---------- livraisons ----------
+let produitLignes = 0;
+function addProduitLigne(){
+  produitLignes++;
+  const id = produitLignes;
+  const div = document.createElement('div');
+  div.className = 'facture-form';
+  div.style.marginBottom = '8px';
+  div.id = 'ligne-' + id;
+  div.innerHTML = `
+    <div class="field" style="margin-bottom:0;"><label>Produit</label><input id="lp-nom-${id}" type="text" placeholder="Ex: Colis"></div>
+    <div class="field" style="margin-bottom:0;"><label>Quantité</label><input id="lp-qte-${id}" type="number" min="1" placeholder="1"></div>
+    <div class="field" style="margin-bottom:0;"><label>Tarif total ($)</label><input id="lp-prix-${id}" type="number" min="0" step="0.01" placeholder="20"></div>
+    <button class="btn ghost" onclick="document.getElementById('ligne-${id}').remove()">Suppr.</button>`;
+  document.getElementById('l-produits').appendChild(div);
+}
+addProduitLigne();
+
+async function submitLivraison(){
+  const depart = document.getElementById('l-depart').value;
+  const retour = document.getElementById('l-retour').value;
+  const errEl = document.getElementById('l-err');
+  errEl.hidden = true;
+  if(!depart || !retour){ errEl.textContent = 'Renseigne les heures de départ et de retour.'; errEl.hidden = false; return; }
+
+  const produits = [];
+  document.querySelectorAll('#l-produits > div').forEach(div => {
+    const id = div.id.split('-')[1];
+    const nom = document.getElementById('lp-nom-'+id).value.trim();
+    const qte = parseFloat(document.getElementById('lp-qte-'+id).value);
+    const prix = parseFloat(document.getElementById('lp-prix-'+id).value);
+    if(nom && qte > 0 && !isNaN(prix)) produits.push({ nom, quantite: qte, prix });
+  });
+  if(produits.length === 0){ errEl.textContent = 'Ajoute au moins un produit valide.'; errEl.hidden = false; return; }
+
+  const total = produits.reduce((a,p) => a + p.prix, 0);
+  const { error } = await sb.from('livraisons').insert({
+    travailleur_id: currentUser.id,
+    heure_depart: new Date(depart).toISOString(),
+    heure_retour: new Date(retour).toISOString(),
+    produits, total
+  });
+  if(error){ errEl.textContent = 'Erreur : ' + error.message; errEl.hidden = false; return; }
+
+  document.getElementById('l-depart').value = '';
+  document.getElementById('l-retour').value = '';
+  document.getElementById('l-produits').innerHTML = '';
+  produitLignes = 0;
+  addProduitLigne();
+  await loadAll();
+  await loadLivraisons();
+}
+
+let livraisons = [];
+async function loadLivraisons(){
+  const { data } = await sb.from('livraisons').select('*').eq('travailleur_id', currentUser.id).order('created_at', { ascending:false });
+  livraisons = data || [];
+  const el = document.getElementById('livraisons-list');
+  if(!livraisons.length){ el.innerHTML = '<div class="empty">Aucune livraison enregistrée.</div>'; return; }
+  el.innerHTML = livraisons.map(l => `<div class="week-block"><div class="week-header"><span class="range">${new Date(l.heure_depart).toLocaleString('fr-FR')} → ${new Date(l.heure_retour).toLocaleString('fr-FR')}</span><span class="summary">${money(Number(l.total))}</span></div>
+    <div class="week-body">${l.produits.map(p => `<div class="receipt-line"><span class="name">${escapeHtml(p.nom)}</span><span class="qty">x${p.quantite}</span><span class="dots"></span><span class="amt">${money(Number(p.prix))}</span></div>`).join('')}</div>
+  </div>`).join('');
+}
+
+async function loadPatronLivraisons(){
+  const { data } = await sb.from('livraisons').select('*, travailleurs(nom_complet)').order('created_at', { ascending:false });
+  const el = document.getElementById('patron-livraisons-list');
+  if(!data || !data.length){ el.innerHTML = '<div class="empty">Aucune livraison enregistrée.</div>'; return; }
+  el.innerHTML = data.map(l => `<div class="week-block"><div class="week-header"><span class="range">${escapeHtml(l.travailleurs ? l.travailleurs.nom_complet : '—')}</span><span class="summary">${new Date(l.heure_depart).toLocaleString('fr-FR')} → ${new Date(l.heure_retour).toLocaleString('fr-FR')} · ${money(Number(l.total))}</span></div>
+    <div class="week-body">${l.produits.map(p => `<div class="receipt-line"><span class="name">${escapeHtml(p.nom)}</span><span class="qty">x${p.quantite}</span><span class="dots"></span><span class="amt">${money(Number(p.prix))}</span></div>`).join('')}</div>
+  </div>`).join('');
+}
 </script>
 
 </body>
