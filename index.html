@@ -258,6 +258,37 @@
 </div>
 
 <!-- ============ APP ============ -->
+<div id="login-screen" hidden style="max-width:420px;margin:60px auto;padding:0 20px;">
+  <div class="card">
+    <h2>Connexion</h2>
+    <div class="field"><label>Nom d'utilisateur</label><input id="login-user" type="text"></div>
+    <div class="field"><label>Mot de passe</label><input id="login-pass" type="password"></div>
+    <button class="btn yellow block" onclick="doLogin()">Se connecter</button>
+    <div id="login-err" class="err" hidden></div>
+  </div>
+</div>
+
+<div id="patron-app" hidden>
+  <div class="header"><div class="brand"><div class="brand-badge">LTD</div><div><h1>Gestion travailleurs</h1></div></div><button class="btn ghost" onclick="logout()">Déconnexion</button></div>
+  <div class="panel">
+    <div id="travailleurs-list-wrap">
+      <div class="card">
+        <h2>Créer un membre</h2>
+        <div class="field"><label>Nom et prénom</label><input id="t-nom" type="text"></div>
+        <div class="field"><label>Nom d'utilisateur</label><input id="t-user" type="text"></div>
+        <div class="field"><label>Mot de passe</label><input id="t-pass" type="text"></div>
+        <button class="btn yellow" onclick="createTravailleur()">Créer</button>
+        <div id="t-err" class="err" hidden></div>
+      </div>
+      <div class="card"><h2>Travailleurs</h2><div id="travailleurs-list"></div></div>
+    </div>
+    <div id="travailleur-detail-wrap" hidden>
+      <button class="btn ghost" style="margin-bottom:14px;" onclick="backToList()">← Retour</button>
+      <div id="travailleur-detail"></div>
+    </div>
+  </div>
+</div>
+
 <div id="app" hidden>
   <div class="header">
     <div class="brand">
@@ -387,6 +418,87 @@ const SB_URL_KEY = 'ltd_sb_url';
 const SB_ANON_KEY = 'ltd_sb_anon';
 const DEFAULT_URL = 'https://uweuexffoitzdqsbxlmc.supabase.co';
 const DEFAULT_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV3ZXVleGZmb2l0emRxc2J4bG1jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI5MjQzODcsImV4cCI6MjA5ODUwMDM4N30.fqSH9Tu6yx9D8dgn7k9iLat-hnJAWatmdqxKYFwkJc0';
+let currentUser = null;
+
+async function sha256Hex(str){
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+
+async function doLogin(){
+  const u = document.getElementById('login-user').value.trim();
+  const p = document.getElementById('login-pass').value;
+  const errEl = document.getElementById('login-err');
+  errEl.hidden = true;
+  if(!u || !p){ errEl.textContent = 'Renseigne un identifiant et un mot de passe.'; errEl.hidden = false; return; }
+  const hash = await sha256Hex(p);
+  const { data, error } = await sb.from('travailleurs').select('*').eq('username', u).eq('password_hash', hash).maybeSingle();
+  if(error || !data){ errEl.textContent = 'Identifiant ou mot de passe incorrect.'; errEl.hidden = false; return; }
+  currentUser = data;
+  document.getElementById('login-screen').hidden = true;
+  if(data.role === 'patron'){
+    document.getElementById('patron-app').hidden = false;
+    await loadTravailleurs();
+  } else {
+    document.getElementById('app').hidden = false;
+    await loadAll();
+  }
+}
+
+function logout(){ currentUser = null; location.reload(); }
+
+async function loadTravailleurs(){
+  const { data } = await sb.from('travailleurs').select('*').eq('role','travailleur').order('created_at');
+  window._travailleurs = data || [];
+  const listEl = document.getElementById('travailleurs-list');
+  if(!window._travailleurs.length){ listEl.innerHTML = '<div class="empty">Aucun travailleur créé pour le moment.</div>'; return; }
+  listEl.innerHTML = window._travailleurs.map(t => `<div class="week-block"><div class="week-header" onclick="openTravailleur('${t.id}')" style="cursor:pointer;"><span class="range">${escapeHtml(t.nom_complet)}</span><span class="summary">@${escapeHtml(t.username)}</span><span class="caret">→</span></div></div>`).join('');
+}
+
+async function createTravailleur(){
+  const nom = document.getElementById('t-nom').value.trim();
+  const user = document.getElementById('t-user').value.trim();
+  const pass = document.getElementById('t-pass').value;
+  const errEl = document.getElementById('t-err');
+  errEl.hidden = true;
+  if(!nom || !user || !pass){ errEl.textContent = 'Remplis tous les champs.'; errEl.hidden = false; return; }
+  const hash = await sha256Hex(pass);
+  const { error } = await sb.from('travailleurs').insert({ nom_complet: nom, username: user, password_hash: hash, role: 'travailleur' });
+  if(error){ errEl.textContent = 'Erreur : ' + error.message; errEl.hidden = false; return; }
+  document.getElementById('t-nom').value = '';
+  document.getElementById('t-user').value = '';
+  document.getElementById('t-pass').value = '';
+  await loadTravailleurs();
+}
+
+async function openTravailleur(id){
+  const t = window._travailleurs.find(x => x.id === id);
+  const [sRes, fRes] = await Promise.all([
+    sb.from('services').select('*').eq('travailleur_id', id).order('started_at', { ascending:false }),
+    sb.from('factures').select('*').eq('travailleur_id', id).order('created_at', { ascending:false })
+  ]);
+  const svcs = sRes.data || [];
+  const facs = fRes.data || [];
+  const total = facs.reduce((a,f)=>a+Number(f.prix_total),0);
+  const perso = total*0.2;
+  const totalSecs = svcs.reduce((a,s)=>a+serviceDurationSeconds(s),0);
+  document.getElementById('travailleur-detail').innerHTML = `
+    <div class="card"><h2>${escapeHtml(t.nom_complet)} (@${escapeHtml(t.username)})</h2></div>
+    <div class="stat-grid">
+      <div class="stat-card money"><div class="eyebrow">Chiffre d'entreprise</div><div class="num">${money(total)}</div></div>
+      <div class="stat-card perso"><div class="eyebrow">Chiffre personnel (20%)</div><div class="num">${money(perso)}</div></div>
+    </div>
+    <div class="card"><h2>Heures de service (total)</h2><div>${formatDuration(totalSecs).slice(0,5)}</div></div>
+    <div class="card"><h2>Détail factures</h2>${facs.length ? facs.map(f=>`<div class="receipt-line"><span class="name">${escapeHtml(f.nom)}</span><span class="qty">x${f.quantite}</span><span class="dots"></span><span class="amt">${money(Number(f.prix_total))}</span></div>`).join('') : '<div class="empty">Aucune facture.</div>'}</div>
+  `;
+  document.getElementById('travailleurs-list-wrap').hidden = true;
+  document.getElementById('travailleur-detail-wrap').hidden = false;
+}
+
+function backToList(){
+  document.getElementById('travailleurs-list-wrap').hidden = false;
+  document.getElementById('travailleur-detail-wrap').hidden = true;
+}
 
 let sb = null;
 let services = [];
@@ -412,8 +524,7 @@ async function connect(){
     localStorage.setItem(SB_URL_KEY, url);
     localStorage.setItem(SB_ANON_KEY, key);
     document.getElementById('config-screen').hidden = true;
-    document.getElementById('app').hidden = false;
-    await loadAll();
+    document.getElementById('login-screen').hidden = false;
   }catch(e){
     errEl.textContent = "Connexion impossible : " + (e.message || e);
     errEl.hidden = false;
@@ -439,8 +550,8 @@ async function tryAutoConnect(){
 // ---------- data loading ----------
 async function loadAll(){
   const [sRes, fRes] = await Promise.all([
-    sb.from('services').select('*').order('started_at', { ascending:false }),
-    sb.from('factures').select('*').order('created_at', { ascending:false })
+    sb.from('services').select('*').eq('travailleur_id', currentUser.id).order('started_at', { ascending:false }),
+    sb.from('factures').select('*').eq('travailleur_id', currentUser.id).order('created_at', { ascending:false })
   ]);
   services = sRes.data || [];
   factures = fRes.data || [];
@@ -477,7 +588,7 @@ async function toggleService(){
       const { error } = await sb.from('services').update({ ended_at: new Date().toISOString() }).eq('id', active.id);
       if(error) throw error;
     } else {
-      const { error } = await sb.from('services').insert({ started_at: new Date().toISOString() });
+      const { error } = await sb.from('services').insert({ started_at: new Date().toISOString(), travailleur_id: currentUser.id });
       if(error) throw error;
     }
     await loadAll();
@@ -660,7 +771,7 @@ async function addFacture(){
     return;
   }
   try{
-    const { error } = await sb.from('factures').insert({ nom, quantite: qte, prix_total: prix });
+    const { error } = await sb.from('factures').insert({ nom, quantite: qte, prix_total: prix, travailleur_id: currentUser.id });
     if(error) throw error;
     document.getElementById('f-nom').value = '';
     document.getElementById('f-qte').value = '';
